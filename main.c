@@ -20,13 +20,21 @@ void startServer(char *);
 void respond(void *);
 void createThread(int);
 
-pthread_t ntid; 
+pthread_t ntid[5]; 
+pthread_mutex_t lock[5];
 
 int main(int argc, char* argv[])
 {
     struct sockaddr_in clientaddr;
     socklen_t addrlen;
     char c;
+    int tmp=0;
+    while(tmp<5){
+    pthread_mutex_init(&lock[tmp],NULL);
+    pthread_mutex_lock(&lock[tmp]);
+    createThread(tmp);
+    tmp++;
+    }
     //дефолтные значения
     char PORT[6];
     ROOT = getenv("PWD");//возвращает значение переменной окружения
@@ -52,7 +60,6 @@ int main(int argc, char* argv[])
                 exit(1);
         }
     
-   
     //установка всех элементов в -1
     int i;
     for (i=0; i<CONNMAX; i++)
@@ -65,8 +72,18 @@ int main(int argc, char* argv[])
     {
         addrlen = sizeof(clientaddr);
         clients[slot] = accept (listenfd, (struct sockaddr *) &clientaddr, &addrlen);//принять соединение на сокете (сокет, адрес другой стороны, длина адреса в байтах)
-        //int status;
-       
+        if(j>4)
+		{
+			j=0;
+            int k=0;
+            int coeff=slot/5;
+            while(k<5)
+			{
+				if(pthread_mutex_trylock(&lock[k])==0)
+					createThread(k+5*coeff);
+                k++;
+			}
+		}
         if (clients[slot]<0)
             error ("accept() error");
         else
@@ -75,10 +92,13 @@ int main(int argc, char* argv[])
             //{
                 //respond(slot);
                 //exit(0);
-             //} //working variant=
-                /status = pthread_create(&ntid,NULL,respond,slot);
+             //} //working variant
+                //pthread_mutex_unlock(&lock);
+                //status = pthread_create(&ntid,NULL,respond,slot);
+                //createThread(slot);
                 
-                if(status!=0){
+                pthread_mutex_unlock(&lock[j]);
+                /*if(status!=0){
                    printf("it's impossible to create a thread %s\n",strerror(status));
                    exit(-11);                 
                 }
@@ -86,8 +106,8 @@ int main(int argc, char* argv[])
                 if(status!=0){
                    printf("main error, can't join");
                    exit(-12);
-                }        
-        }
+                } */         
+        }j++;
         while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
     }
 
@@ -140,7 +160,7 @@ char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
     int n=*p;
     int rcvd, fd, bytes_read;
     memset( (void*)mesg, (int)'\0', 99999 );//заполняет память первого аргумента символами (второй аргумент) 
-  
+    pthread_mutex_lock(&lock[n%5]);
     
     rcvd=recv(clients[n], mesg, 99999, 0);//получить сообщение из сокета, если соединение установлено. возвращает количество принятых байт. записывает во второй аргумент
 
@@ -177,11 +197,20 @@ char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
                 }
                 else    write(clients[n], "HTTP/1.0 404 Not Found\n", 23); //файл не найден
             }
-        }
+        }pthread_mutex_unlock(&lock[n%5]);
     }
 
     //закрытие сокета
     shutdown (clients[n], SHUT_RDWR);         
     close(clients[n]);//закрытие файлового дескриптора
     clients[n]=-1;
+}
+
+void createThread(int k){
+    int *m=(int *)malloc(sizeof(int));
+    *m=k;
+    int err = pthread_create(&ntid,NULL,respond,(void *) m);
+    if(err!=0){
+        printf("error create thread");
+    }
 }
