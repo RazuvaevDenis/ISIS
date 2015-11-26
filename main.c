@@ -10,12 +10,13 @@
 #include<signal.h>
 #include<fcntl.h>
 
-#define CONNMAX 1000
+#define CLIENTMAX 1000
 #define BYTES 1024
 
 char *ROOT;
-int listenfd, clients[CONNMAX];
+int listenfd, clients[CLIENTMAX];
 void error(char *);
+void helping();
 void startServer(char *);
 void respond(void *);
 void createThread(int);
@@ -30,10 +31,10 @@ int main(int argc, char* argv[])
     char c;
     int tmp=0;
     while(tmp<5){
-    pthread_mutex_init(&lock[tmp],NULL);
-    pthread_mutex_lock(&lock[tmp]);
-    createThread(tmp);
-    tmp++;
+    	pthread_mutex_init(&lock[tmp],NULL);
+    	pthread_mutex_lock(&lock[tmp]);
+    	createThread(tmp);
+    	tmp++;
     }
     //дефолтные значения
     char PORT[6];
@@ -43,7 +44,7 @@ int main(int argc, char* argv[])
     int slot=0;
 
     //парсим аргументы
-    while ((c = getopt (argc, argv, "p:r:")) != -1)
+    while ((c = getopt (argc, argv, "p:r:h")) != -1)
         switch (c)
         {
             case 'r':
@@ -53,6 +54,8 @@ int main(int argc, char* argv[])
             case 'p':
                 strcpy(PORT,optarg);
                 break;
+	    case 'h':
+		helping();
             case '?':
                 fprintf(stderr,"Wrong arguments given!!!\n");
                 exit(1);
@@ -62,7 +65,7 @@ int main(int argc, char* argv[])
     
     //установка всех элементов в -1
     int i;
-    for (i=0; i<CONNMAX; i++)
+    for (i=0; i<CLIENTMAX; i++)
         clients[i]=-1;
     startServer(PORT);
     printf("Server started at port no. %s%s%s with root directory as %s%s%s\n","\033[92m",PORT,"\033[0m","\033[92m",ROOT,"\033[0m");
@@ -88,32 +91,19 @@ int main(int argc, char* argv[])
             error ("accept() error");
         else
         {
-            //if ( fork()==0 )
-            //{
-                //respond(slot);
-                //exit(0);
-             //} //working variant
-                //pthread_mutex_unlock(&lock);
-                //status = pthread_create(&ntid,NULL,respond,slot);
-                //createThread(slot);
-                
-                pthread_mutex_unlock(&lock[j]);
-                /*if(status!=0){
-                   printf("it's impossible to create a thread %s\n",strerror(status));
-                   exit(-11);                 
-                }
-                status=pthread_join(ntid,NULL);
-                if(status!=0){
-                   printf("main error, can't join");
-                   exit(-12);
-                } */         
-        }j++;
-        while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
+                pthread_mutex_unlock(&lock[j]);        
+        }
+		j++;
+        while (clients[slot]!=-1) slot = (slot+1)%CLIENTMAX;
     }
-
     return 0;
 }
-
+//помощь
+void helping()
+{
+	printf("Desired options:\n -p port\n -r directory contains requested files\n -h help\n");
+	exit(0);
+}
 //запуск сервера
 void startServer(char *port)
 {
@@ -124,7 +114,7 @@ void startServer(char *port)
     hints.ai_family = AF_INET;//область в которой происходит работа(TCP/IP)
     hints.ai_socktype = SOCK_STREAM;//тип - посылаются потоки байтов
     hints.ai_flags = AI_PASSIVE;//не указывается сетевой адрес каждой структуры
-    if (getaddrinfo( NULL, port, &hints, &res) != 0)//преобразует сетевой адрес и сервис. возвращает адреса сокетов. устанавливает значение res для указания на выделяемый динамический список структу addrinfo - hints. port - номер порта в сетевом адресе
+    if (getaddrinfo( NULL, port, &hints, &res) != 0)//преобразует сетевой адрес и сервис. возвращает адреса сокетов. устанавливает значение res для указания на выделяемый динамический список структур addrinfo - hints (предпочтительный тип сокета или протокол). port - номер порта в сетевом адресе
     {
         perror ("getaddrinfo() error");
         exit(1);
@@ -154,8 +144,7 @@ void startServer(char *port)
 //соединение клиента
 void respond(void *arg)
 {
-
-char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
+	char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
     int *p=(int *)arg;
     int n=*p;
     int rcvd, fd, bytes_read;
@@ -205,7 +194,7 @@ char mesg[99999], *reqline[3], data_to_send[BYTES], path[99999];
     close(clients[n]);//закрытие файлового дескриптора
     clients[n]=-1;
 }
-
+//отправка потока на выполнение
 void createThread(int k){
     int *m=(int *)malloc(sizeof(int));
     *m=k;
